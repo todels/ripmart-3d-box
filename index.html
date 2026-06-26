@@ -12,11 +12,11 @@
   canvas { display:block; }
   .hud { position:fixed; left:24px; top:22px; color:var(--fg); user-select:none; pointer-events:none; }
   .hud h1 { margin:0; font-size:18px; letter-spacing:.04em; font-weight:700; }
-  .hud p { margin:6px 0 0; font-size:13px; color:var(--muted); letter-spacing:.02em; }
+  .hud p  { margin:6px 0 0; font-size:13px; color:var(--muted); letter-spacing:.02em; }
   .controls { position:fixed; right:24px; bottom:24px; display:flex; gap:10px; }
   .btn { pointer-events:auto; cursor:pointer; border:1px solid rgba(0,0,0,.15);
     background:rgba(255,255,255,.70); color:var(--fg); padding:10px 16px; border-radius:999px;
-    font-size:13px; letter-spacing:.03em; backdrop-filter: blur(8px); transition:.18s; }
+    font-size:13px; letter-spacing:.03em; backdrop-filter:blur(8px); transition:.18s; }
   .btn:hover { background:rgba(255,255,255,.90); }
   .btn.active { background:#6b74e0; border-color:#6b74e0; color:#fff; }
   .hint { position:fixed; left:50%; bottom:22px; transform:translateX(-50%); color:var(--muted);
@@ -75,75 +75,24 @@
   <button class="btn" id="resetBtn">Reset view</button>
 </div>
 <div class="hint">Click + drag &nbsp;·&nbsp; right‑drag to pan &nbsp;·&nbsp; scroll to zoom</div>
-<div class="version">v0.7</div>
+<div class="version">v0.8</div>
 <div id="loading">Loading box…</div>
+
+<div id="designPanel">
+  <h2>Upload Designs</h2>
+  <div id="dropZone">
+    <input type="file" id="fileInput" accept="image/*" multiple />
+    <span>Drop files here or click to browse<br/><small>Name them: Front, Top, Back, Bottom, L, R</small></span>
+  </div>
+  <div id="faceLog"></div>
+  <div id="applyMsg"></div>
+</div>
 
 <script type="importmap">
 { "imports": {
   "three": "https://unpkg.com/three@0.165.0/build/three.module.js",
   "three/addons/": "https://unpkg.com/three@0.165.0/examples/jsm/"
 }}
-
-// ── design panel logic ──────────────────────────────────────────────────────
-const selectedFaces = new Set(['front']);
-
-document.querySelectorAll('.face-chip').forEach(chip => {
-  chip.addEventListener('click', () => {
-    const f = chip.dataset.face;
-    if (selectedFaces.has(f)) { selectedFaces.delete(f); chip.classList.remove('sel'); }
-    else { selectedFaces.add(f); chip.classList.add('sel'); }
-  });
-});
-document.getElementById('selAll').onclick = () => {
-  document.querySelectorAll('.face-chip').forEach(c => { selectedFaces.add(c.dataset.face); c.classList.add('sel'); });
-};
-document.getElementById('selNone').onclick = () => {
-  document.querySelectorAll('.face-chip').forEach(c => { selectedFaces.delete(c.dataset.face); c.classList.remove('sel'); });
-};
-
-function applyDesign(dataUrl) {
-  if (selectedFaces.size === 0) { showMsg('No faces selected.', '#ef4444'); return; }
-  const t = new THREE.TextureLoader().load(dataUrl);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  t.center.set(0.5, 0.5);
-  selectedFaces.forEach(name => {
-    const mesh = faceMeshes[name];
-    if (!mesh) return;
-    mesh.material.map = t;
-    mesh.material.needsUpdate = true;
-  });
-  showMsg(`Applied to: ${[...selectedFaces].join(', ')}`, '#22c55e');
-}
-
-function showMsg(txt, color) {
-  const el = document.getElementById('applyMsg');
-  el.textContent = txt; el.style.color = color;
-  setTimeout(() => { el.textContent = ''; }, 3000);
-}
-
-const dropZone = document.getElementById('dropZone');
-const fileInput = document.getElementById('fileInput');
-
-fileInput.addEventListener('change', e => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = ev => applyDesign(ev.target.result);
-  reader.readAsDataURL(file);
-});
-
-dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
-dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
-dropZone.addEventListener('drop', e => {
-  e.preventDefault(); dropZone.classList.remove('drag-over');
-  const file = e.dataTransfer.files[0];
-  if (!file || !file.type.startsWith('image/')) { showMsg('Please drop an image file.', '#ef4444'); return; }
-  const reader = new FileReader();
-  reader.onload = ev => applyDesign(ev.target.result);
-  reader.readAsDataURL(file);
-});
-
 </script>
 
 <script type="module">
@@ -165,12 +114,10 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.95;
 app.appendChild(renderer.domElement);
 
-// environment for very subtle, even fill (no harsh reflections)
 const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.5).texture;
 scene.environmentIntensity = 0.35;
 
-// lights — soft, even, neutral so the printed art reads true
 scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 const key = new THREE.DirectionalLight(0xffffff, 0.9);
 key.position.set(4, 7, 5);
@@ -189,7 +136,7 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 // box ratio 6 x 4 x 2  (width x depth x height) -> scale /2
-const W = 3.0, H = 1.0, D = 2.0;   // width, height(vertical), depth
+const W = 3.0, H = 1.0, D = 2.0;
 
 const TEX = {
   'Front':  'testbox/Front.png',
@@ -199,10 +146,11 @@ const TEX = {
   'L':      'testbox/L.png',
   'R':      'testbox/R.png',
 };
+
 const loader = new THREE.TextureLoader();
 let pending = 6;
 function tex(file, rotation=0, flipX=false){
-  const done = ()=>{ if(--pending===0){ const l=document.getElementById('loading'); if(l) l.remove(); } };
+  const done = () => { if(--pending===0){ const l=document.getElementById('loading'); if(l) l.remove(); } };
   const t = loader.load(TEX[file], done, undefined, done);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -212,13 +160,10 @@ function tex(file, rotation=0, flipX=false){
   return t;
 }
 
-// Build the box from 6 separate panels so the net's adjacency is preserved.
-// The column front→base→back→top wraps as a continuous band around the X axis,
-// so stickers straddling a fold flow across the corresponding box edge.
 const hw = W/2, hh = H/2, hd = D/2;
 const box = new THREE.Group();
-
 const faceMeshes = {};
+
 function face(file, w, h, pos, rot, name){
   const m = new THREE.MeshStandardMaterial({ map:tex(file), roughness:0.95, metalness:0.0, envMapIntensity:0.15 });
   const p = new THREE.Mesh(new THREE.PlaneGeometry(w, h), m);
@@ -230,19 +175,16 @@ function face(file, w, h, pos, rot, name){
 }
 
 const HP = Math.PI/2;
-// continuous band (wraps around X): base→back wall→top lid→front
-face('Bottom', W, D, [0, -hh, 0], [ HP, 0], 'Bottom');  // -Y
-face('Back',   W, H, [0, 0, -hd], [ Math.PI, 0], 'Back');   // -Z
-face('Top',    W, D, [0,  hh, 0], [-HP, 0], 'Top');     // +Y
-face('Front',  W, H, [0, 0,  hd], [0, 0], 'Front');       // +Z
-// side walls
-face('R',  D, H, [ hw, 0, 0], [0,  HP], 'R');             // +X
-face('L',   D, H, [-hw, 0, 0], [0, -HP], 'L');             // -X
+face('Bottom', W, D, [0, -hh, 0], [ HP, 0], 'Bottom');
+face('Back',   W, H, [0, 0, -hd], [ Math.PI, 0], 'Back');
+face('Top',    W, D, [0,  hh, 0], [-HP, 0], 'Top');
+face('Front',  W, H, [0, 0,  hd], [0, 0], 'Front');
+face('R',      D, H, [ hw, 0, 0], [0,  HP], 'R');
+face('L',      D, H, [-hw, 0, 0], [0, -HP], 'L');
 
-box.position.y = hh;             // sit on the ground
+box.position.y = hh;
 scene.add(box);
 
-// soft contact shadow ground
 const ground = new THREE.Mesh(
   new THREE.PlaneGeometry(40, 40),
   new THREE.ShadowMaterial({ opacity:0.18 })
@@ -251,7 +193,6 @@ ground.rotation.x = -Math.PI/2;
 ground.receiveShadow = true;
 scene.add(ground);
 
-// controls
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.07;
@@ -280,73 +221,10 @@ function loop(){
 }
 loop();
 
-// ── design panel logic ──────────────────────────────────────────────────────
-const selectedFaces = new Set(['front']);
-
-document.querySelectorAll('.face-chip').forEach(chip => {
-  chip.addEventListener('click', () => {
-    const f = chip.dataset.face;
-    if (selectedFaces.has(f)) { selectedFaces.delete(f); chip.classList.remove('sel'); }
-    else { selectedFaces.add(f); chip.classList.add('sel'); }
-  });
-});
-document.getElementById('selAll').onclick = () => {
-  document.querySelectorAll('.face-chip').forEach(c => { selectedFaces.add(c.dataset.face); c.classList.add('sel'); });
-};
-document.getElementById('selNone').onclick = () => {
-  document.querySelectorAll('.face-chip').forEach(c => { selectedFaces.delete(c.dataset.face); c.classList.remove('sel'); });
-};
-
-function applyDesign(dataUrl) {
-  if (selectedFaces.size === 0) { showMsg('No faces selected.', '#ef4444'); return; }
-  const t = new THREE.TextureLoader().load(dataUrl);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  t.center.set(0.5, 0.5);
-  selectedFaces.forEach(name => {
-    const mesh = faceMeshes[name];
-    if (!mesh) return;
-    mesh.material.map = t;
-    mesh.material.needsUpdate = true;
-  });
-  showMsg(`Applied to: ${[...selectedFaces].join(', ')}`, '#22c55e');
-}
-
-function showMsg(txt, color) {
-  const el = document.getElementById('applyMsg');
-  el.textContent = txt; el.style.color = color;
-  setTimeout(() => { el.textContent = ''; }, 3000);
-}
-
-const dropZone = document.getElementById('dropZone');
-const fileInput = document.getElementById('fileInput');
-
-fileInput.addEventListener('change', e => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = ev => applyDesign(ev.target.result);
-  reader.readAsDataURL(file);
-});
-
-dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
-dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
-dropZone.addEventListener('drop', e => {
-  e.preventDefault(); dropZone.classList.remove('drag-over');
-  const file = e.dataTransfer.files[0];
-  if (!file || !file.type.startsWith('image/')) { showMsg('Please drop an image file.', '#ef4444'); return; }
-  const reader = new FileReader();
-  reader.onload = ev => applyDesign(ev.target.result);
-  reader.readAsDataURL(file);
-});
-
-
-// ── design panel logic ──────────────────────────────────────────────────────
-// Known face keys (must match TEX object keys)
+// ── design panel ──────────────────────────────────────────────────────────
 const FACE_KEYS = ['Front', 'Top', 'Back', 'Bottom', 'L', 'R'];
 
 function stemOf(filename) {
-  // Strip extension, case-insensitive match
   return filename.replace(/\.[^.]+$/, '');
 }
 
@@ -401,17 +279,6 @@ dropZone.addEventListener('drop', e => {
   e.preventDefault(); dropZone.classList.remove('drag-over');
   if (e.dataTransfer.files.length) applyFiles(e.dataTransfer.files);
 });
-
 </script>
-
-<div id="designPanel">
-  <h2>Upload Designs</h2>
-  <div id="dropZone">
-    <input type="file" id="fileInput" accept="image/*" multiple />
-    <span>Drop files here or click to browse<br/><small>Name them: Front, Top, Back, Bottom, L, R</small></span>
-  </div>
-  <div id="faceLog"></div>
-  <div id="applyMsg"></div>
-</div>
 </body>
 </html>
