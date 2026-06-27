@@ -75,7 +75,7 @@
   <button class="btn" id="resetBtn">Reset view</button>
 </div>
 <div class="hint">Click + drag &nbsp;·&nbsp; right‑drag to pan &nbsp;·&nbsp; scroll to zoom</div>
-<div class="version">v0.9</div>
+<div class="version">v1.0</div>
 <div id="loading">Loading box…</div>
 
 <div id="designPanel">
@@ -250,6 +250,7 @@ function applyFiles(files) {
         t.colorSpace = THREE.SRGBColorSpace;
         t.anisotropy = renderer.capabilities.getMaxAnisotropy();
         t.center.set(0.5, 0.5);
+        if (key === 'L' || key === 'R') t.rotation = -Math.PI/2;
         const mesh = faceMeshes[key];
         if (mesh) { mesh.material.map = t; mesh.material.needsUpdate = true; }
       };
