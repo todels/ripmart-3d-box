@@ -73,9 +73,10 @@
 <div class="controls">
   <button class="btn active" id="spinBtn">Auto‑spin</button>
   <button class="btn" id="resetBtn">Reset view</button>
+  <button class="btn" id="labelBtn">Show labels</button>
 </div>
 <div class="hint">Click + drag &nbsp;·&nbsp; right‑drag to pan &nbsp;·&nbsp; scroll to zoom</div>
-<div class="version">v1.0</div>
+<div class="version">v1.1</div>
 <div id="loading">Loading box…</div>
 
 <div id="designPanel">
@@ -220,6 +221,51 @@ function loop(){
   renderer.render(scene, camera);
 }
 loop();
+
+// ── face labels ───────────────────────────────────────────────────────────
+function makeLabel(text) {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 256;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.roundRect(20, 20, c.width-40, c.height-40, 24);
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 96px ui-sans-serif, system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, c.width/2, c.height/2);
+  const t = new THREE.CanvasTexture(c);
+  return new THREE.Mesh(
+    new THREE.PlaneGeometry(1.4, 0.7),
+    new THREE.MeshBasicMaterial({ map:t, transparent:true, depthTest:false })
+  );
+}
+
+const labelMeshes = [];
+const labelDefs = [
+  { name:'Front',  pos:[0, 0,  hd+0.01],        rotX:0,        rotY:0 },
+  { name:'Back',   pos:[0, 0, -hd-0.01],        rotX:0,        rotY:Math.PI },
+  { name:'Top',    pos:[0,  hh+0.01, 0],         rotX:-Math.PI/2, rotY:0 },
+  { name:'Bottom', pos:[0, -hh-0.01, 0],         rotX:Math.PI/2,  rotY:0 },
+  { name:'R',      pos:[ hw+0.01, 0, 0],         rotX:0,        rotY:Math.PI/2 },
+  { name:'L',      pos:[-hw-0.01, 0, 0],         rotX:0,        rotY:-Math.PI/2 },
+];
+labelDefs.forEach(({ name, pos, rotX, rotY }) => {
+  const m = makeLabel(name);
+  m.position.set(pos[0], pos[1], pos[2]);
+  m.rotation.x = rotX; m.rotation.y = rotY;
+  m.visible = false;
+  box.add(m);
+  labelMeshes.push(m);
+});
+
+let labelsOn = false;
+document.getElementById('labelBtn').onclick = function() {
+  labelsOn = !labelsOn;
+  labelMeshes.forEach(m => m.visible = labelsOn);
+  this.classList.toggle('active', labelsOn);
+};
 
 // ── design panel ──────────────────────────────────────────────────────────
 const FACE_KEYS = ['Front', 'Top', 'Back', 'Bottom', 'L', 'R'];
