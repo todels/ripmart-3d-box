@@ -76,7 +76,7 @@
   <button class="btn" id="labelBtn">Show labels</button>
 </div>
 <div class="hint">Click + drag &nbsp;·&nbsp; right‑drag to pan &nbsp;·&nbsp; scroll to zoom</div>
-<div class="version">v1.2</div>
+<div class="version">v1.3</div>
 <div id="loading">Loading box…</div>
 
 <div id="designPanel">
@@ -292,14 +292,16 @@ function applyFiles(files) {
       matched++;
       const reader = new FileReader();
       reader.onload = ev => {
-        const t = new THREE.TextureLoader().load(ev.target.result);
-        t.colorSpace = THREE.SRGBColorSpace;
-        t.anisotropy = renderer.capabilities.getMaxAnisotropy();
-        t.center.set(0.5, 0.5);
-        if (key === 'L' || key === 'R') t.rotation = -Math.PI/2;
-        if (key === 'R') { t.wrapS = THREE.RepeatWrapping; t.repeat.x = -1; }
-        const mesh = faceMeshes[key];
-        if (mesh) { mesh.material.map = t; mesh.material.needsUpdate = true; }
+        const t = new THREE.TextureLoader().load(ev.target.result, () => {
+          t.colorSpace = THREE.SRGBColorSpace;
+          t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+          t.center.set(0.5, 0.5);
+          if (key === 'L' || key === 'R') t.rotation = -Math.PI/2;
+          if (key === 'R') { t.wrapS = THREE.RepeatWrapping; t.repeat.x = -1; }
+          t.needsUpdate = true;
+          const mesh = faceMeshes[key];
+          if (mesh) { mesh.material.map = t; mesh.material.needsUpdate = true; }
+        });
       };
       reader.readAsDataURL(file);
     } else {
