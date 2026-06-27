@@ -164,8 +164,8 @@ const hw = W/2, hh = H/2, hd = D/2;
 const box = new THREE.Group();
 const faceMeshes = {};
 
-function face(file, w, h, pos, rot, name){
-  const m = new THREE.MeshStandardMaterial({ map:tex(file), roughness:0.95, metalness:0.0, envMapIntensity:0.15 });
+function face(file, w, h, pos, rot, name, texRot=0){
+  const m = new THREE.MeshStandardMaterial({ map:tex(file, texRot), roughness:0.95, metalness:0.0, envMapIntensity:0.15 });
   const p = new THREE.Mesh(new THREE.PlaneGeometry(w, h), m);
   p.position.set(pos[0], pos[1], pos[2]);
   p.rotation.x = rot[0]; p.rotation.y = rot[1];
@@ -179,8 +179,8 @@ face('Bottom', W, D, [0, -hh, 0], [ HP, 0], 'Bottom');
 face('Back',   W, H, [0, 0, -hd], [ Math.PI, 0], 'Back');
 face('Top',    W, D, [0,  hh, 0], [-HP, 0], 'Top');
 face('Front',  W, H, [0, 0,  hd], [0, 0], 'Front');
-face('R',      D, H, [ hw, 0, 0], [0,  HP], 'R');
-face('L',      D, H, [-hw, 0, 0], [0, -HP], 'L');
+face('R',      D, H, [ hw, 0, 0], [0,  HP], 'R', -Math.PI/2);
+face('L',      D, H, [-hw, 0, 0], [0, -HP], 'L', -Math.PI/2);
 
 box.position.y = hh;
 scene.add(box);
