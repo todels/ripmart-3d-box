@@ -26,6 +26,24 @@
     color:var(--muted); font-size:14px; letter-spacing:.06em; }
 
   /* ── design panel ── */
+  #panelToggle {
+    position:fixed; left:24px; top:64px;
+    display:none;
+    pointer-events:auto; cursor:pointer;
+    border:1px solid rgba(0,0,0,.15);
+    background:rgba(255,255,255,.80);
+    backdrop-filter:blur(8px);
+    color:var(--fg); padding:10px 16px;
+    border-radius:999px; font-size:13px;
+    letter-spacing:.03em; transition:.18s;
+    box-shadow:0 2px 12px rgba(0,0,0,.10);
+  }
+  #panelToggle:hover { background:rgba(255,255,255,.95); }
+  @media (max-width: 600px) {
+    #panelToggle { display:block; }
+    #designPanel { display:none; top:116px; }
+    #designPanel.open { display:block; }
+  }
   #designPanel {
     position:fixed; left:24px; top:64px;
     width:240px;
@@ -74,9 +92,10 @@
   <button class="btn" id="labelBtn">Show labels</button>
 </div>
 <div class="hint">Click + drag &nbsp;·&nbsp; right‑drag to pan &nbsp;·&nbsp; scroll to zoom</div>
-<div class="version">v1.6</div>
+<div class="version">v1.7</div>
 <div id="loading">Loading box…</div>
 
+<button id="panelToggle">☰ Designs</button>
 <div id="designPanel">
   <h2>Design</h2>
   <div id="designList">
@@ -305,6 +324,12 @@ document.getElementById('labelBtn').onclick = function() {
   labelsOn = !labelsOn;
   labelMeshes.forEach(m => m.visible = labelsOn);
   this.classList.toggle('active', labelsOn);
+};
+
+// ── panel toggle (mobile) ─────────────────────────────────────────────────
+document.getElementById('panelToggle').onclick = function() {
+  document.getElementById('designPanel').classList.toggle('open');
+  this.textContent = document.getElementById('designPanel').classList.contains('open') ? '✕ Close' : '☰ Designs';
 };
 
 // ── design selector + upload ──────────────────────────────────────────────
