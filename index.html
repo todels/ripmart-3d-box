@@ -76,7 +76,7 @@
   <button class="btn" id="labelBtn">Show labels</button>
 </div>
 <div class="hint">Click + drag &nbsp;·&nbsp; right‑drag to pan &nbsp;·&nbsp; scroll to zoom</div>
-<div class="version">v1.3</div>
+<div class="version">v1.4</div>
 <div id="loading">Loading box…</div>
 
 <div id="designPanel">
@@ -148,25 +148,60 @@ const TEX = {
   'R':      'testbox/R.png',
 };
 
-const loader = new THREE.TextureLoader();
+// Per-face canvas transforms applied before uploading to GPU
+// rotation: CW radians, flipX: mirror horizontally (applied after rotation)
+const FACE_TRANSFORMS = {
+  'L': { rotation: Math.PI/2, flipX: false },
+  'R': { rotation: Math.PI/2, flipX: true  },
+};
+
+function canvasTransform(img, rotation, flipX) {
+  const swap = Math.abs(rotation) > 0.01;
+  const c = document.createElement('canvas');
+  c.width  = swap ? img.height : img.width;
+  c.height = swap ? img.width  : img.height;
+  const ctx = c.getContext('2d');
+  ctx.translate(c.width/2, c.height/2);
+  if (flipX) ctx.scale(-1, 1);
+  ctx.rotate(rotation);
+  ctx.drawImage(img, -img.width/2, -img.height/2);
+  return c;
+}
+
 let pending = 6;
-function tex(file, rotation=0, flipX=false){
-  const done = () => { if(--pending===0){ const l=document.getElementById('loading'); if(l) l.remove(); } };
-  const t = loader.load(TEX[file], done, undefined, done);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  t.center.set(0.5, 0.5);
-  t.rotation = rotation;
-  if (flipX){ t.wrapS = THREE.RepeatWrapping; t.repeat.x = -1; }
-  return t;
+function checkDone(){ if(--pending===0){ const l=document.getElementById('loading'); if(l) l.remove(); } }
+
+function tex(file){
+  const tr = FACE_TRANSFORMS[file];
+  const m = new THREE.MeshStandardMaterial({ roughness:0.95, metalness:0.0, envMapIntensity:0.15 });
+  if (tr) {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const t = new THREE.CanvasTexture(canvasTransform(img, tr.rotation, tr.flipX));
+      t.colorSpace = THREE.SRGBColorSpace;
+      t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      m.map = t; m.needsUpdate = true;
+      checkDone();
+    };
+    img.onerror = checkDone;
+    img.src = TEX[file];
+  } else {
+    const loader = new THREE.TextureLoader();
+    const t = loader.load(TEX[file], checkDone, undefined, checkDone);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    m.map = t;
+  }
+  return m;
 }
 
 const hw = W/2, hh = H/2, hd = D/2;
 const box = new THREE.Group();
 const faceMeshes = {};
 
-function face(file, w, h, pos, rot, name, texRot=0, flipX=false){
-  const m = new THREE.MeshStandardMaterial({ map:tex(file, texRot, flipX), roughness:0.95, metalness:0.0, envMapIntensity:0.15 });
+function face(file, w, h, pos, rot, name){
+  const m = tex(file);
   const p = new THREE.Mesh(new THREE.PlaneGeometry(w, h), m);
   p.position.set(pos[0], pos[1], pos[2]);
   p.rotation.x = rot[0]; p.rotation.y = rot[1];
@@ -180,8 +215,8 @@ face('Bottom', W, D, [0, -hh, 0], [ HP, 0], 'Bottom');
 face('Back',   W, H, [0, 0, -hd], [ Math.PI, 0], 'Back');
 face('Top',    W, D, [0,  hh, 0], [-HP, 0], 'Top');
 face('Front',  W, H, [0, 0,  hd], [0, 0], 'Front');
-face('R',      D, H, [ hw, 0, 0], [0,  HP], 'R', -Math.PI/2, true);
-face('L',      D, H, [-hw, 0, 0], [0, -HP], 'L', -Math.PI/2);
+face('R',      D, H, [ hw, 0, 0], [0,  HP], 'R');
+face('L',      D, H, [-hw, 0, 0], [0, -HP], 'L');
 
 box.position.y = hh;
 scene.add(box);
@@ -292,16 +327,18 @@ function applyFiles(files) {
       matched++;
       const reader = new FileReader();
       reader.onload = ev => {
-        const t = new THREE.TextureLoader().load(ev.target.result, () => {
+        const img = new Image();
+        img.onload = () => {
+          const tr = FACE_TRANSFORMS[key];
+          const source = tr ? canvasTransform(img, tr.rotation, tr.flipX) : img;
+          const t = tr ? new THREE.CanvasTexture(source) : new THREE.Texture(source);
           t.colorSpace = THREE.SRGBColorSpace;
           t.anisotropy = renderer.capabilities.getMaxAnisotropy();
-          t.center.set(0.5, 0.5);
-          if (key === 'L' || key === 'R') t.rotation = -Math.PI/2;
-          if (key === 'R') { t.wrapS = THREE.RepeatWrapping; t.repeat.x = -1; }
           t.needsUpdate = true;
           const mesh = faceMeshes[key];
           if (mesh) { mesh.material.map = t; mesh.material.needsUpdate = true; }
-        });
+        };
+        img.src = ev.target.result;
       };
       reader.readAsDataURL(file);
     } else {
