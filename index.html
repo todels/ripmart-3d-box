@@ -28,40 +28,38 @@
   /* ── design panel ── */
   #designPanel {
     position:fixed; left:24px; top:64px;
-    width:270px;
+    width:240px;
     background:rgba(255,255,255,.88);
     backdrop-filter:blur(14px);
     border:1px solid rgba(0,0,0,.10);
     border-radius:16px;
-    padding:18px;
+    padding:14px;
     color:var(--fg);
     font-size:13px;
     box-shadow:0 4px 24px rgba(0,0,0,.12);
     pointer-events:auto;
     user-select:none;
   }
-  #designPanel h2 { margin:0 0 14px; font-size:13px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); }
-  #dropZone {
-    border:2px dashed rgba(0,0,0,.20);
-    border-radius:12px; padding:26px 12px;
-    text-align:center; color:var(--muted);
-    font-size:12px; line-height:1.7;
-    cursor:pointer; transition:.15s;
+  #designPanel h2 { margin:0 0 10px; font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+  #designList { display:flex; flex-direction:column; gap:5px; margin-bottom:10px; }
+  .design-chip {
+    cursor:pointer; border:1px solid rgba(0,0,0,.10);
+    background:rgba(0,0,0,.04); color:var(--fg);
+    padding:8px 12px; border-radius:10px;
+    font-size:12.5px; font-weight:500; transition:.15s;
+  }
+  .design-chip:hover { background:rgba(0,0,0,.08); }
+  .design-chip.active { background:#6b74e0; border-color:#6b74e0; color:#fff; }
+  #uploadBtn {
+    width:100%; cursor:pointer; border:1px dashed rgba(0,0,0,.20);
+    background:transparent; color:var(--muted);
+    padding:7px 0; border-radius:10px;
+    font-size:12px; text-align:center; transition:.15s;
     position:relative;
   }
-  #dropZone:hover, #dropZone.drag-over { border-color:#6b74e0; color:#6b74e0; background:rgba(107,116,224,.06); }
-  #dropZone input[type=file] { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%; }
-  #faceLog { margin-top:12px; display:flex; flex-direction:column; gap:5px; }
-  .face-row {
-    display:flex; align-items:center; justify-content:space-between;
-    background:rgba(0,0,0,.04); border-radius:8px; padding:6px 10px;
-    font-size:11.5px;
-  }
-  .face-row .fname { font-weight:600; color:var(--fg); }
-  .face-row .fstatus { color:var(--muted); font-size:11px; }
-  .face-row.matched .fstatus { color:#22c55e; }
-  .face-row.unmatched .fstatus { color:#ef4444; }
-  #applyMsg { margin-top:10px; font-size:12px; color:#22c55e; text-align:center; min-height:18px; }
+  #uploadBtn:hover { border-color:#6b74e0; color:#6b74e0; background:rgba(107,116,224,.06); }
+  #uploadBtn input[type=file] { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%; }
+  #applyMsg { margin-top:8px; font-size:11.5px; color:#22c55e; text-align:center; min-height:16px; }
 </style>
 </head>
 <body>
@@ -76,16 +74,23 @@
   <button class="btn" id="labelBtn">Show labels</button>
 </div>
 <div class="hint">Click + drag &nbsp;·&nbsp; right‑drag to pan &nbsp;·&nbsp; scroll to zoom</div>
-<div class="version">v1.5</div>
+<div class="version">v1.6</div>
 <div id="loading">Loading box…</div>
 
 <div id="designPanel">
-  <h2>Upload Designs</h2>
-  <div id="dropZone">
-    <input type="file" id="fileInput" accept="image/*" multiple />
-    <span>Drop files here or click to browse<br/><small>Name them: Front, Top, Back, Bottom, L, R</small></span>
+  <h2>Design</h2>
+  <div id="designList">
+    <div class="design-chip active" data-folder="testbox">Testbox</div>
+    <div class="design-chip" data-folder="Dark Flat">Dark Flat</div>
+    <div class="design-chip" data-folder="Dark Gradient">Dark Gradient</div>
+    <div class="design-chip" data-folder="Red 1">Red 1</div>
+    <div class="design-chip" data-folder="Red 2">Red 2</div>
+    <div class="design-chip" data-folder="Red 3">Red 3</div>
   </div>
-  <div id="faceLog"></div>
+  <div id="uploadBtn">
+    <input type="file" id="fileInput" accept="image/*" multiple />
+    + Upload custom
+  </div>
   <div id="applyMsg"></div>
 </div>
 
@@ -302,69 +307,58 @@ document.getElementById('labelBtn').onclick = function() {
   this.classList.toggle('active', labelsOn);
 };
 
-// ── design panel ──────────────────────────────────────────────────────────
+// ── design selector + upload ──────────────────────────────────────────────
 const FACE_KEYS = ['Front', 'Top', 'Back', 'Bottom', 'L', 'R'];
 
-function stemOf(filename) {
-  return filename.replace(/\.[^.]+$/, '');
+function applyFaceUrl(key, url) {
+  const tr = FACE_TRANSFORMS[key];
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    const source = tr ? canvasTransform(img, tr.rotation, tr.flipX, tr.flipY) : img;
+    const t = tr ? new THREE.CanvasTexture(source) : new THREE.Texture(source);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    t.needsUpdate = true;
+    const mesh = faceMeshes[key];
+    if (mesh) { mesh.material.map = t; mesh.material.needsUpdate = true; }
+  };
+  img.src = url;
 }
 
-function applyFiles(files) {
-  const log = document.getElementById('faceLog');
-  log.innerHTML = '';
-  let matched = 0, unmatched = 0;
+function loadDesign(folder) {
+  FACE_KEYS.forEach(key => applyFaceUrl(key, encodeURIComponent(folder) + '/' + key + '.png'));
+}
 
-  Array.from(files).forEach(file => {
-    if (!file.type.startsWith('image/')) return;
-    const stem = stemOf(file.name);
-    const key = FACE_KEYS.find(k => k.toLowerCase() === stem.toLowerCase());
-    const row = document.createElement('div');
-    row.className = 'face-row ' + (key ? 'matched' : 'unmatched');
-    row.innerHTML = '<span class="fname">' + stem + '</span><span class="fstatus">' + (key ? '✓ ' + key : '✗ no match') + '</span>';
-    log.appendChild(row);
-
-    if (key) {
-      matched++;
-      const reader = new FileReader();
-      reader.onload = ev => {
-        const img = new Image();
-        img.onload = () => {
-          const tr = FACE_TRANSFORMS[key];
-          const source = tr ? canvasTransform(img, tr.rotation, tr.flipX, tr.flipY) : img;
-          const t = tr ? new THREE.CanvasTexture(source) : new THREE.Texture(source);
-          t.colorSpace = THREE.SRGBColorSpace;
-          t.anisotropy = renderer.capabilities.getMaxAnisotropy();
-          t.needsUpdate = true;
-          const mesh = faceMeshes[key];
-          if (mesh) { mesh.material.map = t; mesh.material.needsUpdate = true; }
-        };
-        img.src = ev.target.result;
-      };
-      reader.readAsDataURL(file);
-    } else {
-      unmatched++;
-    }
+// Design chips
+document.querySelectorAll('.design-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.design-chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    loadDesign(chip.dataset.folder);
   });
+});
 
-  const msg = document.getElementById('applyMsg');
-  if (matched === 0) {
-    msg.textContent = 'No files matched face names.'; msg.style.color = '#ef4444';
-  } else {
-    msg.textContent = matched + ' face' + (matched > 1 ? 's' : '') + ' updated' + (unmatched ? ', ' + unmatched + ' unrecognised' : '') + '.';
-    msg.style.color = '#22c55e';
-  }
-  setTimeout(() => { msg.textContent = ''; }, 4000);
-}
-
-const dropZone = document.getElementById('dropZone');
+// Upload button
 const fileInput = document.getElementById('fileInput');
-
-fileInput.addEventListener('change', e => { if (e.target.files.length) applyFiles(e.target.files); });
-dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
-dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
-dropZone.addEventListener('drop', e => {
-  e.preventDefault(); dropZone.classList.remove('drag-over');
-  if (e.dataTransfer.files.length) applyFiles(e.dataTransfer.files);
+fileInput.addEventListener('change', e => {
+  const msg = document.getElementById('applyMsg');
+  let matched = 0;
+  Array.from(e.target.files).forEach(file => {
+    if (!file.type.startsWith('image/')) return;
+    const stem = file.name.replace(/\.[^.]+$/, '');
+    const key = FACE_KEYS.find(k => k.toLowerCase() === stem.toLowerCase());
+    if (!key) return;
+    matched++;
+    const reader = new FileReader();
+    reader.onload = ev => applyFaceUrl(key, ev.target.result);
+    reader.readAsDataURL(file);
+  });
+  // deselect preset chips since we're now in custom mode
+  document.querySelectorAll('.design-chip').forEach(c => c.classList.remove('active'));
+  msg.textContent = matched ? matched + ' face' + (matched > 1 ? 's' : '') + ' updated.' : 'No matching files.';
+  msg.style.color = matched ? '#22c55e' : '#ef4444';
+  setTimeout(() => { msg.textContent = ''; }, 3000);
 });
 </script>
 </body>
