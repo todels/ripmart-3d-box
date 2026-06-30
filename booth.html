@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ripmart — Exhibition Booth</title>
+<style>
+  :root { --fg:#111827; --muted:#6b7280; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; overflow:hidden; background:#d4d4d4; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  #app { position:fixed; inset:0; background: radial-gradient(ellipse 120% 100% at 50% 20%, #ffffff 0%, #e2e2e2 55%, #c4c4c4 100%); }
+  canvas { display:block; }
+  .hud { position:fixed; left:24px; top:22px; color:var(--fg); user-select:none; pointer-events:none; }
+  .hud h1 { margin:0; font-size:18px; letter-spacing:.04em; font-weight:700; }
+  .hud p  { margin:6px 0 0; font-size:13px; color:var(--muted); letter-spacing:.02em; }
+  .controls { position:fixed; right:24px; bottom:24px; display:flex; gap:10px; }
+  .btn { pointer-events:auto; cursor:pointer; border:1px solid rgba(0,0,0,.15);
+    background:rgba(255,255,255,.70); color:var(--fg); padding:10px 16px; border-radius:999px;
+    font-size:13px; letter-spacing:.03em; backdrop-filter:blur(8px); transition:.18s; }
+  .btn:hover { background:rgba(255,255,255,.90); }
+  .btn.active { background:#6b74e0; border-color:#6b74e0; color:#fff; }
+  .hint { position:fixed; left:50%; bottom:22px; transform:translateX(-50%); color:var(--muted);
+    font-size:12.5px; letter-spacing:.05em; pointer-events:none; }
+  .version { position:fixed; right:24px; top:22px; color:var(--muted); font-size:11px; letter-spacing:.06em; pointer-events:none; }
+  #loading { position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+    color:var(--muted); font-size:14px; letter-spacing:.06em; }
+
+  /* ── design panel ── */
+  #panelToggle {
+    position:fixed; left:24px; top:64px;
+    display:none;
+    pointer-events:auto; cursor:pointer;
+    border:1px solid rgba(0,0,0,.15);
+    background:rgba(255,255,255,.80);
+    backdrop-filter:blur(8px);
+    color:var(--fg); padding:10px 16px;
+    border-radius:999px; font-size:13px;
+    letter-spacing:.03em; transition:.18s;
+    box-shadow:0 2px 12px rgba(0,0,0,.10);
+  }
+  #panelToggle:hover { background:rgba(255,255,255,.95); }
+  @media (max-width: 600px) {
+    #panelToggle { display:block; }
+    #designPanel { display:none; top:116px; }
+    #designPanel.open { display:block; }
+  }
+  #designPanel {
+    position:fixed; left:24px; top:64px;
+    width:240px;
+    background:rgba(255,255,255,.88);
+    backdrop-filter:blur(14px);
+    border:1px solid rgba(0,0,0,.10);
+    border-radius:16px;
+    padding:14px;
+    color:var(--fg);
+    font-size:13px;
+    box-shadow:0 4px 24px rgba(0,0,0,.12);
+    pointer-events:auto;
+    user-select:none;
+  }
+  #designPanel h2 { margin:0 0 10px; font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+  #designList { display:flex; flex-direction:column; gap:5px; margin-bottom:10px; }
+  .design-chip {
+    cursor:pointer; border:1px solid rgba(0,0,0,.10);
+    background:rgba(0,0,0,.04); color:var(--fg);
+    padding:8px 12px; border-radius:10px;
+    font-size:12.5px; font-weight:500; transition:.15s;
+  }
+  .design-chip:hover { background:rgba(0,0,0,.08); }
+  .design-chip.active { background:#6b74e0; border-color:#6b74e0; color:#fff; }
+  #uploadBtn {
+    width:100%; cursor:pointer; border:1px dashed rgba(0,0,0,.20);
+    background:transparent; color:var(--muted);
+    padding:7px 0; border-radius:10px;
+    font-size:12px; text-align:center; transition:.15s;
+    position:relative;
+  }
+  #uploadBtn:hover { border-color:#6b74e0; color:#6b74e0; background:rgba(107,116,224,.06); }
+  #uploadBtn input[type=file] { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%; }
+  #applyMsg { margin-top:8px; font-size:11.5px; color:#22c55e; text-align:center; min-height:16px; }
+
+  /* wall key legend */
+  #wallLegend {
+    margin-top:10px; border-top:1px solid rgba(0,0,0,.07); padding-top:10px;
+  }
+  #wallLegend h3 { margin:0 0 6px; font-size:10px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+  .wall-row { display:flex; justify-content:space-between; font-size:11px; color:var(--muted); padding:2px 0; }
+  .wall-key { font-weight:600; color:var(--fg); }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="hud">
+  <h1>RIPMART</h1>
+  <p>Exhibition booth · drag to rotate · scroll to zoom</p>
+</div>
+<div class="controls">
+  <button class="btn active" id="spinBtn">Auto‑spin</button>
+  <button class="btn" id="resetBtn">Reset view</button>
+  <button class="btn" id="labelBtn">Show labels</button>
+</div>
+<div class="hint">Click + drag &nbsp;·&nbsp; right‑drag to pan &nbsp;·&nbsp; scroll to zoom</div>
+<div class="version">booth v1.0</div>
+<div id="loading">Loading booth…</div>
+
+<button id="panelToggle">☰ Designs</button>
+<div id="designPanel">
+  <h2>Design</h2>
+  <div id="designList">
+    <!-- Add design chips here once booth-specific folders exist -->
+  </div>
+  <div id="uploadBtn">
+    <input type="file" id="fileInput" accept="image/*" multiple />
+    + Upload custom
+  </div>
+  <div id="applyMsg"></div>
+  <div id="wallLegend">
+    <h3>Wall file names</h3>
+    <div class="wall-row"><span class="wall-key">Wall1.png</span><span>Right wall (door)</span></div>
+    <div class="wall-row"><span class="wall-key">Wall2.png</span><span>Back wall</span></div>
+    <div class="wall-row"><span class="wall-key">Wall3.png</span><span>Left wall</span></div>
+    <div class="wall-row"><span class="wall-key">Wall4.png</span><span>Case front</span></div>
+    <div class="wall-row"><span class="wall-key">Wall5.png</span><span>LED right</span></div>
+    <div class="wall-row"><span class="wall-key">Wall6.png</span><span>LED left</span></div>
+    <div class="wall-row"><span class="wall-key">Wall7.png</span><span>Side wall right</span></div>
+    <div class="wall-row"><span class="wall-key">Wall8.png</span><span>Side wall left</span></div>
+    <div class="wall-row"><span class="wall-key">Wall9.png</span><span>Left small wall</span></div>
+    <div class="wall-row"><span class="wall-key">Wall10.png</span><span>Right small wall</span></div>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.165.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.165.0/examples/jsm/"
+}}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const app = document.getElementById('app');
+const scene = new THREE.Scene();
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 100);
+const START = new THREE.Vector3(2.2, 2.4, 3.8);
+camera.position.copy(START);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.95;
+app.appendChild(renderer.domElement);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.5).texture;
+scene.environmentIntensity = 0.35;
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+const key = new THREE.DirectionalLight(0xffffff, 0.9);
+key.position.set(5, 8, 6);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.camera.near = 1; key.shadow.camera.far = 40;
+key.shadow.camera.left = -8; key.shadow.camera.right = 8;
+key.shadow.camera.top = 8; key.shadow.camera.bottom = -8;
+key.shadow.bias = -0.0004;
+scene.add(key);
+const rim = new THREE.DirectionalLight(0x9aa6ff, 0.3);
+rim.position.set(-5, 3, -4);
+scene.add(rim);
+
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+// ── Booth dimensions (approx 1/3 scale in metres) ────────────────────────
+// Back wall: ~6.7m wide × 3.5m tall → /3 ≈ 2.23 × 1.17
+// Side walls (#1/#3): ~3m deep → /3 = 1.0
+// Wings front (#5/#6): ~1m wide → /3 ≈ 0.33
+// Wing side (#7/#8): ~1.24m deep → /3 ≈ 0.41
+// Case front (#4): ~2m wide → /3 ≈ 0.67
+// Small walls (#9/#10): ~0.5m wide → /3 ≈ 0.17
+const BW = 2.23;  // back wall width
+const BD = 1.0;   // main booth depth (side wall length)
+const BH = 1.17;  // booth height
+const WW = 0.33;  // wing width (front face)
+const WD = 0.41;  // wing depth (side face)
+const CW = 0.67;  // case width
+const CD = 0.30;  // case depth
+const SW = 0.17;  // small wall width
+
+const hh = BH / 2; // mid-height
+
+// ── Face definitions ──────────────────────────────────────────────────────
+// rotY: rotation around Y to orient normal
+//   0    → normal faces +z (toward front viewer)
+//   π    → normal faces -z (exterior back)
+//   -π/2 → normal faces +x (exterior right)
+//   +π/2 → normal faces -x (exterior left)
+const HP = Math.PI / 2;
+const FACE_DEFS = [
+  // key,      width, height, [x,         y,  z],                       rotY
+  ['Wall1',  BD,   BH,  [ BW/2,        hh,  0],                        -HP     ],  // right wall exterior
+  ['Wall2',  BW,   BH,  [ 0,           hh, -BD/2],                     Math.PI ],  // back wall exterior
+  ['Wall3',  BD,   BH,  [-BW/2,        hh,  0],                         HP     ],  // left wall exterior
+  ['Wall4',  CW,   BH,  [ 0,           hh,  BD/2 + CD],                 0      ],  // case / counter front
+  ['Wall5',  WW,   BH,  [ BW/2 - WW/2, hh,  BD/2 + WD],                0      ],  // LED right (front of right wing)
+  ['Wall6',  WW,   BH,  [-BW/2 + WW/2, hh,  BD/2 + WD],                0      ],  // LED left  (front of left wing)
+  ['Wall7',  WD,   BH,  [ BW/2,        hh,  BD/2 + WD/2],             -HP     ],  // right wing outer side
+  ['Wall8',  WD,   BH,  [-BW/2,        hh,  BD/2 + WD/2],              HP     ],  // left wing outer side
+  ['Wall9',  SW,   BH,  [-BW/2 + WW,   hh,  BD/2 + WD/2],              HP     ],  // left small (inner face of left wing)
+  ['Wall10', SW,   BH,  [ BW/2 - WW,   hh,  BD/2 + WD/2],             -HP     ],  // right small (inner face of right wing)
+];
+
+const FACE_KEYS = FACE_DEFS.map(f => f[0]);
+
+// ── Default white/off-white material factory ──────────────────────────────
+function makeMat() {
+  return new THREE.MeshStandardMaterial({
+    color: 0xf0f0f0,
+    roughness: 0.92,
+    metalness: 0.0,
+    envMapIntensity: 0.15,
+    side: THREE.FrontSide,
+  });
+}
+
+// ── Build booth group ─────────────────────────────────────────────────────
+const booth = new THREE.Group();
+const faceMeshes = {};
+
+FACE_DEFS.forEach(([key, w, h, pos, rotY]) => {
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), makeMat());
+  mesh.position.set(...pos);
+  mesh.rotation.y = rotY;
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  booth.add(mesh);
+  faceMeshes[key] = mesh;
+});
+
+// ── Interior floor (plain, not textured) ─────────────────────────────────
+const floor = new THREE.Mesh(
+  new THREE.PlaneGeometry(BW, BD),
+  new THREE.MeshStandardMaterial({ color: 0xf8f8f8, roughness: 0.95 })
+);
+floor.rotation.x = -Math.PI / 2;
+floor.position.y = 0.001;
+booth.add(floor);
+
+// ── Ceiling inside the main U (not textured) ─────────────────────────────
+const ceiling = new THREE.Mesh(
+  new THREE.PlaneGeometry(BW, BD),
+  new THREE.MeshStandardMaterial({ color: 0xe8e8e8, roughness: 0.95 })
+);
+ceiling.rotation.x = Math.PI / 2;
+ceiling.position.set(0, BH, 0);
+booth.add(ceiling);
+
+// ── Wing roofs ────────────────────────────────────────────────────────────
+[[-BW/2 + WW/2, BW/2 - WW/2]].flat().forEach((cx, i) => {
+  const sign = i === 0 ? -1 : 1;
+  const roof = new THREE.Mesh(
+    new THREE.PlaneGeometry(WW, WD),
+    new THREE.MeshStandardMaterial({ color: 0xe0e0e0, roughness: 0.95 })
+  );
+  roof.rotation.x = Math.PI / 2;
+  roof.position.set(sign * (BW/2 - WW/2), BH, BD/2 + WD/2);
+  booth.add(roof);
+});
+
+// ── Case top ─────────────────────────────────────────────────────────────
+const caseTop = new THREE.Mesh(
+  new THREE.PlaneGeometry(CW, CD),
+  new THREE.MeshStandardMaterial({ color: 0xe0e0e0, roughness: 0.95 })
+);
+caseTop.rotation.x = Math.PI / 2;
+caseTop.position.set(0, BH, BD/2 + CD/2);
+booth.add(caseTop);
+
+// ── Aluminum frame edges (black tubes) ───────────────────────────────────
+const frameMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.5, metalness: 0.6 });
+const fr = 0.025; // frame radius
+
+function addEdge(ax, ay, az, bx, by, bz) {
+  const dx = bx-ax, dy = by-ay, dz = bz-az;
+  const len = Math.sqrt(dx*dx+dy*dy+dz*dz);
+  const cyl = new THREE.Mesh(new THREE.CylinderGeometry(fr, fr, len, 6), frameMat);
+  cyl.position.set((ax+bx)/2, (ay+by)/2, (az+bz)/2);
+  cyl.quaternion.setFromUnitVectors(
+    new THREE.Vector3(0,1,0),
+    new THREE.Vector3(dx,dy,dz).normalize()
+  );
+  cyl.castShadow = true;
+  booth.add(cyl);
+}
+
+// Helper: add a rectangular frame outline (4 edges) given corner points
+function addRect(x0,y0,z0, x1,y1,z1, x2,y2,z2, x3,y3,z3) {
+  addEdge(x0,y0,z0, x1,y1,z1);
+  addEdge(x1,y1,z1, x2,y2,z2);
+  addEdge(x2,y2,z2, x3,y3,z3);
+  addEdge(x3,y3,z3, x0,y0,z0);
+}
+
+const zB = -BD/2, zF = BD/2, zW = BD/2+WD, zC = BD/2+CD;
+const xL = -BW/2, xR = BW/2, xLW = xL+WW, xRW = xR-WW;
+const xLC = -CW/2, xRC = CW/2;
+const y0 = 0, y1 = BH;
+
+// Back wall frame
+addRect(xL,y0,zB, xR,y0,zB, xR,y1,zB, xL,y1,zB);
+// Left wall frame
+addRect(xL,y0,zB, xL,y0,zF, xL,y1,zF, xL,y1,zB);
+// Right wall frame
+addRect(xR,y0,zB, xR,y0,zF, xR,y1,zF, xR,y1,zB);
+// Left wing side
+addRect(xL,y0,zF, xL,y0,zW, xL,y1,zW, xL,y1,zF);
+// Right wing side
+addRect(xR,y0,zF, xR,y0,zW, xR,y1,zW, xR,y1,zF);
+// Left wing front face
+addRect(xL,y0,zW, xLW,y0,zW, xLW,y1,zW, xL,y1,zW);
+// Right wing front face
+addRect(xR,y0,zW, xRW,y0,zW, xRW,y1,zW, xR,y1,zW);
+// Left small inner wall (inner face of left wing)
+addRect(xLW,y0,zF, xLW,y0,zW, xLW,y1,zW, xLW,y1,zF);
+// Right small inner wall
+addRect(xRW,y0,zF, xRW,y0,zW, xRW,y1,zW, xRW,y1,zF);
+// Case front
+addRect(xLC,y0,zC, xRC,y0,zC, xRC,y1,zC, xLC,y1,zC);
+// Case left side
+addRect(xLC,y0,zF, xLC,y0,zC, xLC,y1,zC, xLC,y1,zF);
+// Case right side
+addRect(xRC,y0,zF, xRC,y0,zC, xRC,y1,zC, xRC,y1,zF);
+// Front opening verticals
+addEdge(xLW,y0,zF, xLW,y1,zF);
+addEdge(xRW,y0,zF, xRW,y1,zF);
+
+booth.position.y = 0;
+scene.add(booth);
+
+// ── Ground shadow catcher ─────────────────────────────────────────────────
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(60, 60),
+  new THREE.ShadowMaterial({ opacity: 0.15 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// ── Controls ──────────────────────────────────────────────────────────────
+const TARGET = new THREE.Vector3(0, BH / 2, 0.2);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.07;
+controls.minDistance = 2.0;
+controls.maxDistance = 16;
+controls.target.copy(TARGET);
+controls.update();
+
+let spin = true;
+const spinBtn = document.getElementById('spinBtn');
+spinBtn.onclick = () => { spin = !spin; spinBtn.classList.toggle('active', spin); };
+document.getElementById('resetBtn').onclick = () => {
+  camera.position.copy(START);
+  controls.target.copy(TARGET);
+  controls.update();
+};
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+function loop() {
+  requestAnimationFrame(loop);
+  if (spin) booth.rotation.y += 0.004;
+  controls.update();
+  renderer.render(scene, camera);
+}
+loop();
+
+// remove loading indicator immediately (no async textures until user uploads)
+const loadingEl = document.getElementById('loading');
+if (loadingEl) loadingEl.remove();
+
+// ── Face labels ───────────────────────────────────────────────────────────
+function makeLabel(text) {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 200;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.roundRect(16, 16, c.width - 32, c.height - 32, 20);
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 72px ui-sans-serif, system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, c.width / 2, c.height / 2);
+  const t = new THREE.CanvasTexture(c);
+  return new THREE.Mesh(
+    new THREE.PlaneGeometry(0.9, 0.35),
+    new THREE.MeshBasicMaterial({ map: t, transparent: true, depthTest: false })
+  );
+}
+
+const labelMeshes = [];
+FACE_DEFS.forEach(([key, w, h, pos, rotY]) => {
+  const lbl = makeLabel(key);
+  lbl.position.set(...pos);
+  // offset slightly outward so label sits just in front of the face
+  const dir = new THREE.Vector3(0, 0, 1).applyEuler(new THREE.Euler(0, rotY, 0));
+  lbl.position.addScaledVector(dir, 0.012);
+  lbl.rotation.y = rotY;
+  lbl.visible = false;
+  booth.add(lbl);
+  labelMeshes.push(lbl);
+});
+
+let labelsOn = false;
+document.getElementById('labelBtn').onclick = function () {
+  labelsOn = !labelsOn;
+  labelMeshes.forEach(m => m.visible = labelsOn);
+  this.classList.toggle('active', labelsOn);
+};
+
+// ── Panel toggle (mobile) ─────────────────────────────────────────────────
+document.getElementById('panelToggle').onclick = function () {
+  document.getElementById('designPanel').classList.toggle('open');
+  this.textContent = document.getElementById('designPanel').classList.contains('open')
+    ? '✕ Close' : '☰ Designs';
+};
+
+// ── Texture application ───────────────────────────────────────────────────
+function applyFaceUrl(key, url) {
+  const mesh = faceMeshes[key];
+  if (!mesh) return;
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    const t = new THREE.Texture(img);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    t.needsUpdate = true;
+    mesh.material.map = t;
+    mesh.material.color.set(0xffffff);
+    mesh.material.needsUpdate = true;
+  };
+  img.src = url;
+}
+
+function loadDesign(folder) {
+  FACE_KEYS.forEach(key => {
+    applyFaceUrl(key, encodeURIComponent(folder) + '/' + key + '.png');
+  });
+}
+
+// Design chips
+document.querySelectorAll('.design-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.design-chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    loadDesign(chip.dataset.folder);
+  });
+});
+
+// Upload
+const fileInput = document.getElementById('fileInput');
+fileInput.addEventListener('change', e => {
+  const msg = document.getElementById('applyMsg');
+  let matched = 0;
+  Array.from(e.target.files).forEach(file => {
+    if (!file.type.startsWith('image/')) return;
+    const stem = file.name.replace(/\.[^.]+$/, '');
+    const key = FACE_KEYS.find(k => k.toLowerCase() === stem.toLowerCase());
+    if (!key) return;
+    matched++;
+    const reader = new FileReader();
+    reader.onload = ev => applyFaceUrl(key, ev.target.result);
+    reader.readAsDataURL(file);
+  });
+  document.querySelectorAll('.design-chip').forEach(c => c.classList.remove('active'));
+  msg.textContent = matched
+    ? matched + ' wall' + (matched > 1 ? 's' : '') + ' updated.'
+    : 'No matching files (name them Wall1.png – Wall10.png).';
+  msg.style.color = matched ? '#22c55e' : '#ef4444';
+  setTimeout(() => { msg.textContent = ''; }, 3500);
+});
+</script>
+</body>
+</html>
